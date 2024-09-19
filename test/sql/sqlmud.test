@@ -1,0 +1,23 @@
+# name: test/sql/sqlmud.test
+# description: test sqlmud extension
+# group: [sqlmud]
+
+# Before we load the extension, this will fail
+statement error
+SELECT sqlmud('Sam');
+----
+Catalog Error: Scalar Function with name sqlmud does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require sqlmud
+
+# Confirm the extension works
+query I
+SELECT sqlmud('Sam');
+----
+Sqlmud Sam 🐥
+
+query I
+SELECT sqlmud_openssl_version('Michael') ILIKE 'Sqlmud Michael, my linked OpenSSL version is OpenSSL%';
+----
+true
