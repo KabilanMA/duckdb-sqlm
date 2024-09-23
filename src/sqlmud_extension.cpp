@@ -53,6 +53,7 @@ namespace duckdb
     vector<string> GenerateMutations(const string &query)
     {
         vector<string> mutations;
+        std::cout << "Calling the actual mutation function." << std::endl;
 
         // Example mutation 1: Change "=" to "!="
         string mutation1 = query;
@@ -85,6 +86,7 @@ namespace duckdb
                                                              vector<LogicalType> &return_types, vector<string> &names)
     {
         auto result = make_uniq<MutationTestFunctionData>(StringValue::Get(input.inputs[0]));
+        std::cout << "Binding Mutation Test Function!" << std::endl;
         // Generate multiple mutations for the input query
         result->mutated_queries = GenerateMutations(result->original_query);
 
@@ -97,6 +99,9 @@ namespace duckdb
     static void MutationTestFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output)
     {
         auto &data = data_p.bind_data->CastNoConst<MutationTestFunctionData>();
+
+        std::cout << "Calling the mutation test function" << std::endl;
+        std::cout << data.mutated_queries[data.current_index] << std::endl;
 
         // If all mutations are finished, set the output as empty
         if (data.current_index >= data.mutated_queries.size())
