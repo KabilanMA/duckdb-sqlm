@@ -1,11 +1,10 @@
 #pragma once
 
 #include "duckdb.hpp"
-#include "sqlmud_extension.hpp"
-#include "duckdb.hpp"
+#include "data.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/function/scalar_function.hpp"
+// #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/extension_util.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 #include "duckdb/parser/parser_options.hpp"
@@ -13,6 +12,7 @@
 #include "duckdb/planner/planner.hpp"
 #include "postgres_parser.hpp"
 #include "duckdb/parser/transformer.hpp"
+#include "mutation_generator.hpp"
 
 namespace duckdb
 {
