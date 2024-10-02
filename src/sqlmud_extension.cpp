@@ -163,7 +163,7 @@ namespace duckdb
     //     }
     // }
 
-    // SELECT mutant FROM mutation_test("SELECT * FROM teacher WHERE salary > 10;");
+    // SELECT mutant FROM mutation_test("SELECT DISTINCT * FROM teacher WHERE salary > 10;");
     static duckdb::unique_ptr<FunctionData> MutationTestBind(ClientContext &context, TableFunctionBindInput &input,
                                                              vector<LogicalType> &return_types, vector<string> &names)
     {
@@ -188,9 +188,6 @@ namespace duckdb
         // std::cout << "Binding Mutation Test Function!" << std::endl;
         // Generate multiple mutations for the input query
         // result->mutated_queries = GenerateMutations(*statement);
-        // TODO: run the mutation
-        // TODO: compare the result with original query
-        // TODO: return the mutated query which returns the same result
 
         // Return type is a string for the mutated query
         return_types.emplace_back(LogicalType::VARCHAR);
@@ -211,6 +208,8 @@ namespace duckdb
         // std::cout << "Printing the original query" << std::endl;
         // std::cout << data.original_query << std::endl;
 
+        // TODO: execute the original query and cache the result
+
         // If all mutations are finished, set the output as empty
         if (data.current_index >= data.mutated_queries.size())
         {
@@ -219,6 +218,10 @@ namespace duckdb
         }
         // std::cout << "Printing the current mutation" << std::endl;
         // std::cout << data.mutated_queries.get(data.current_index) << std::endl;
+
+        // TODO: execute the current mutated query
+        // TODO: compare it with the original query result
+        // Output only the equivalent mutants
 
         // Set the output to the current mutation
         output.SetCardinality(1);

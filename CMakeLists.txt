@@ -12,12 +12,15 @@ set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
+include_directories(src/third_party/transform/include)
 include_directories(src/include)
-# include_directories(src/third_party)
+
+add_subdirectory(src/third_party/transform)
 
 set(EXTENSION_SOURCES 
   src/sqlmud_extension.cpp
   src/mutation_generator.cpp
+  src/third_party/transform/transformer.cpp
   )
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
