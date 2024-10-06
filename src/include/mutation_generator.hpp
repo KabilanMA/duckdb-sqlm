@@ -13,13 +13,16 @@
 #include "postgres_parser.hpp"
 #include "../third_party/transform/include/transformer.hpp"
 #include "duckdb/parser/transformer.hpp"
+#include "duckdb/parser/query_node.hpp"
 
 namespace duckdb
 {
     typedef enum MutationOperatorTag
     {
         SEL,
-        OR
+        ROR,
+        JOI,
+        LCR
     } MutationOperatorTag;
 
     // MutationTreeNode class to represent a single SQL query node
@@ -45,7 +48,7 @@ namespace duckdb
         ~MudStatementGenerator();
 
     public:
-        MutationTreeNode *GenerateSelectMutations(SelectStatement &statement, MutationTestFunctionData *functionData, MutationTreeNode *parent_node = nullptr);
+        MutationTreeNode *GenerateSelectMutations(SelectStatement &statement, MutationTestFunctionData *functionData, MutationTreeNode *parent_node = nullptr, MutationOperatorTag operator_type = MutationOperatorTag::SEL);
 
     private:
         bool DistinctModifierExist(vector<unique_ptr<ResultModifier>> &modifiers, bool remove_modifier = false);
