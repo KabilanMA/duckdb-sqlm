@@ -60,12 +60,17 @@ namespace duckdb
         duckdb_libpgquery::PGList *parse_trees = ParserQuery(context, functionData->original_query);
         GenerateMutations(parse_trees, functionData);
 
+        std::cout << "Trying to create connection for querying original SQL statement" << std::endl;
         Connection con(context.db->GetDatabase(context));
+        std::cout << "Querying with original Query: " << functionData->original_query << std::endl;
         auto result_ = con.Query(functionData->original_query);
         functionData->original_result = std::move(result_);
 
+        names.emplace_back("all_mutants");
         return_types.emplace_back(LogicalType::VARCHAR);
-        names.emplace_back("mutant");
+
+        names.emplace_back("equivalent_mutants");
+        return_types.emplace_back(LogicalType::VARCHAR);
 
         duckdb::unique_ptr<MutationTestFunctionData> result(functionData);
         return std::move(result);
@@ -83,13 +88,25 @@ namespace duckdb
         }
 
         Connection con(context.db->GetDatabase(context));
-        auto result = con.Query(data.mutated_queries[data.current_index]);
+        std::cout << "Going to query the statement: " << data.mutated_queries[data.current_index]->ToString() << std::endl;
+        auto ex_query = data.mutated_queries[data.current_index]->Copy();
+        auto result = con.Query(std::move(ex_query));
         int count = 0;
-        if (result->Equals(*(data.original_result)))
-        {
-            output.SetValue(0, 0, Value(data.mutated_queries[data.current_index]));
-            count++;
-        }
+        // if (result->Equals(*(data.original_result)))
+        // {
+        output.SetValue(0, count, Value(data.mutated_queries[data.current_index]->ToString()));
+        // if (result->Equals(*(data.original_result)))
+        // {
+        //     output.SetValue(1, count, Value(data.mutated_queries[data.current_index]->ToString()));
+        // }
+        // else
+        // {
+        //     output.SetValue(1, count, Value("NULL"));
+        // }
+        output.SetValue(1, count, Value("NULL"));
+
+        count++;
+        // }
         // TODO: execute the current mutated query
         // TODO: compare it with the original query result
         // Output only the equivalent mutants

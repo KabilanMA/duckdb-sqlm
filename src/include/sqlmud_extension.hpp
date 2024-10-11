@@ -13,6 +13,7 @@
 #include "postgres_parser.hpp"
 #include "duckdb/parser/transformer.hpp"
 #include "mutation_generator.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb
 {
