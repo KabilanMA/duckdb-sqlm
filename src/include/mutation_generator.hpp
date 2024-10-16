@@ -51,11 +51,6 @@ namespace duckdb
 
     public:
         MutationTreeNode *GenerateSelectMutations(const SelectStatement &statement, MutationTestFunctionData *functionData, MutationTreeNode *parent_node = nullptr, MutationOperatorTag operator_type = MutationOperatorTag::SEL);
-        void MutateWhereClauseStatement(MutationTreeNode *parent_node, const unique_ptr<SQLStatement> &stmt, MutationTestFunctionData *functionData);
-
-        void GenerateSelectMutation(duckdb_libpgquery::PGSelectStmt &select, bool is_select);
-
-        void AppendOperator(QueryNode *node, MutationTestFunctionData *functionData, MutationOperatorTag operator_type);
 
     private:
         bool DistinctModifierExist(vector<unique_ptr<ResultModifier>> &modifiers, bool remove_modifier = false);
