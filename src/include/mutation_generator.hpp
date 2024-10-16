@@ -30,14 +30,13 @@ namespace duckdb
     class MutationTreeNode
     {
     public:
-        const SQLStatement &statement;                           // SQL query string
+        std::unique_ptr<SQLStatement> statement;                 // SQL query string
         std::vector<std::unique_ptr<MutationTreeNode>> children; // Pointers to child nodes
 
-        explicit MutationTreeNode(const SQLStatement &statement);
+        explicit MutationTreeNode(std::unique_ptr<SQLStatement> statement);
 
         // Add a child node
-        void AddChild(const SQLStatement &child_query);
-        void AddChild(const string &child_query);
+        void AddChild(SQLStatement &child_query);
 
         // Recursively print the query tree
         void PrintTree(int depth = 0);
@@ -50,7 +49,7 @@ namespace duckdb
         ~MudStatementGenerator();
 
     public:
-        MutationTreeNode *GenerateSelectMutations(const SelectStatement &statement, MutationTestFunctionData *functionData, MutationTreeNode *parent_node = nullptr, MutationOperatorTag operator_type = MutationOperatorTag::SEL);
+        MutationTreeNode *GenerateSelectMutations(SelectStatement &statement, MutationTestFunctionData *functionData, MutationTreeNode *parent_node = nullptr, MutationOperatorTag operator_type = MutationOperatorTag::SEL);
 
     private:
         bool DistinctModifierExist(vector<unique_ptr<ResultModifier>> &modifiers, bool remove_modifier = false);
