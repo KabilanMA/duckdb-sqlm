@@ -88,7 +88,7 @@ namespace duckdb
         }
 
         Connection con(context.db->GetDatabase(context));
-        std::cout << "Going to query the statement: " << data.mutated_queries[data.current_index]->ToString() << std::endl;
+        // std::cout << "Going to query the statement: " << data.mutated_queries[data.current_index]->ToString() << std::endl;
         auto ex_query = data.mutated_queries[data.current_index]->Copy();
         auto result = con.Query(std::move(ex_query));
         int count = 0;

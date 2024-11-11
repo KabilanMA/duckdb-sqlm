@@ -146,9 +146,9 @@ namespace duckdb
                     }
                 }};
 
-            std::random_device rd;
-            std::mt19937 g(rd());
-            std::shuffle(condition_actions.begin(), condition_actions.end(), g);
+            // std::random_device rd;
+            // std::mt19937 g(rd());
+            // std::shuffle(condition_actions.begin(), condition_actions.end(), g);
 
             for (auto &action : condition_actions)
             {
@@ -161,94 +161,142 @@ namespace duckdb
         {
             auto *conjunction_expr = dynamic_cast<ConjunctionExpression *>(expression);
             vector<ExpressionType> except = {};
-            for (size_t i = 0; i < conjunction_expr->children.size(); i++)
+            if (conjunction_expr->children.size() == 2)
             {
-                std::cout << "Value of i in conjunction AND, OR: " << i << std::endl;
-                auto &child = conjunction_expr->children.get(i);
+                auto &left_child = conjunction_expr->children.get(0);
+                auto &right_child = conjunction_expr->children.get(1);
 
-                except.push_back(child->type);
-                for (size_t j = i; j < conjunction_expr->children.size(); j++)
+                std::function<void(MutationTreeNode *, SQLStatement *, MutationTestFunctionData *, ConjunctionExpression *, ParsedExpression *, ParsedExpression *)> mutateChild = [](MutationTreeNode *_parent_node, SQLStatement *_stmt, MutationTestFunctionData *_functionData, ConjunctionExpression *conjunction_expr, ParsedExpression *left_child, ParsedExpression *right_child)
                 {
-                    std::cout << "Value of ij in conjunction AND, OR: " << i << " " << j << std::endl;
-                    if (i < j)
+                    std::function<void(MutationTreeNode *, SQLStatement *, MutationTestFunctionData *, ConjunctionExpression *, ParsedExpression *)> permutationMutateExpression = [](MutationTreeNode *_parent_node, SQLStatement *_stmt, MutationTestFunctionData *_functionData, ConjunctionExpression *conjunction_expr, ParsedExpression *right_expression)
                     {
-                        auto &internal_child = conjunction_expr->children.get(j);
+                        _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                        _parent_node->AddChild(*_stmt);
+                        MutateParsedExpression(_parent_node, _stmt, _functionData, right_expression, {right_expression->type});
 
-                        MutateParsedExpression(parent_node, stmt, functionData, internal_child.get(), {internal_child->type});
-                        if (expression->type == ExpressionType::CONJUNCTION_AND)
+                        if (conjunction_expr->type == ExpressionType::CONJUNCTION_OR)
                         {
-                            expression->type = ExpressionType::CONJUNCTION_OR;
-                            MutateParsedExpression(parent_node, stmt, functionData, internal_child.get(), {});
-                            expression->type = ExpressionType::CONJUNCTION_AND;
+                            conjunction_expr->type = ExpressionType::CONJUNCTION_AND;
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            _parent_node->AddChild(*_stmt);
+                            MutateParsedExpression(_parent_node, _stmt, _functionData, right_expression, {right_expression->type});
+                            conjunction_expr->type = ExpressionType::CONJUNCTION_OR;
                         }
-                        else if (expression->type == ExpressionType::CONJUNCTION_OR)
+                        else if (conjunction_expr->type == ExpressionType::CONJUNCTION_AND)
                         {
-                            expression->type = ExpressionType::CONJUNCTION_AND;
-                            MutateParsedExpression(parent_node, stmt, functionData, internal_child.get(), {});
-                            expression->type = ExpressionType::CONJUNCTION_OR;
+                            conjunction_expr->type = ExpressionType::CONJUNCTION_OR;
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            _parent_node->AddChild(*_stmt);
+                            MutateParsedExpression(_parent_node, _stmt, _functionData, right_expression, {right_expression->type});
+                            conjunction_expr->type = ExpressionType::CONJUNCTION_AND;
                         }
+                    };
+
+                    if (left_child->type != ExpressionType::COMPARE_LESSTHAN)
+                    {
+                        left_child->type = ExpressionType::COMPARE_LESSTHAN;
+                        permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
                     }
+
+                    if (left_child->type != ExpressionType::COMPARE_LESSTHANOREQUALTO)
+                    {
+                        left_child->type = ExpressionType::COMPARE_LESSTHANOREQUALTO;
+                        permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
+                    }
+
+                    if (left_child->type != ExpressionType::COMPARE_GREATERTHAN)
+                    {
+                        left_child->type = ExpressionType::COMPARE_GREATERTHAN;
+                        permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
+                    }
+
+                    if (left_child->type != ExpressionType::COMPARE_GREATERTHANOREQUALTO)
+                    {
+                        left_child->type = ExpressionType::COMPARE_GREATERTHANOREQUALTO;
+                        permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
+                    }
+
+                    if (left_child->type != ExpressionType::COMPARE_EQUAL)
+                    {
+                        left_child->type = ExpressionType::COMPARE_EQUAL;
+                        permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
+                    }
+
+                    if (left_child->type != ExpressionType::COMPARE_NOTEQUAL)
+                    {
+                        left_child->type = ExpressionType::COMPARE_NOTEQUAL;
+                        permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
+                    }
+                };
+
+                if (left_child->type == ExpressionType::COMPARE_EQUAL || left_child->type == ExpressionType::COMPARE_NOTEQUAL || left_child->type == ExpressionType::COMPARE_LESSTHAN || left_child->type == ExpressionType::COMPARE_LESSTHANOREQUALTO || left_child->type == ExpressionType::COMPARE_GREATERTHAN || left_child->type == ExpressionType::COMPARE_GREATERTHANOREQUALTO)
+                {
+                    mutateChild(parent_node, stmt, functionData, conjunction_expr, left_child.get(), right_child.get());
                 }
-                MutateParsedExpression(parent_node, stmt, functionData, child.get(), except);
+                else if (right_child->type == ExpressionType::COMPARE_EQUAL || right_child->type == ExpressionType::COMPARE_NOTEQUAL || right_child->type == ExpressionType::COMPARE_LESSTHAN || right_child->type == ExpressionType::COMPARE_LESSTHANOREQUALTO || right_child->type == ExpressionType::COMPARE_GREATERTHAN || right_child->type == ExpressionType::COMPARE_GREATERTHANOREQUALTO)
+                {
+                    mutateChild(parent_node, stmt, functionData, conjunction_expr, right_child.get(), left_child.get());
+                }
+            }
+            else
+            {
+                // TODO: implement multiple children mutation for where caluse.
             }
             break;
         }
         default:
         {
+            std::cout << ExpressionTypeToString(expression->type) << std::endl;
             throw InternalException("Implemented expression type");
             break;
         }
         }
     }
 
-    void MutateJoinType(JoinType new_type, SQLStatement *stmt, MutationTreeNode *parent_node, MutationTestFunctionData *functionData)
-    {
-        std::cout << "Calling the Mutate MutateJoinType function with type: " << std::endl;
+    // void MutateJoinType(JoinType new_type, SQLStatement *stmt, MutationTreeNode *parent_node, MutationTestFunctionData *functionData)
+    // {
+    //     std::cout << "Calling the Mutate MutateJoinType function with type: " << std::endl;
 
-        auto old_type = stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type;
-        stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = new_type;
-        functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
-        parent_node->AddChild(*stmt);
-        stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = old_type;
-        // join_ref.type = old_type;
-    }
+    //     auto old_type = stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type;
+    //     stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = new_type;
+    //     functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
+    //     parent_node->AddChild(*stmt);
+    //     stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = old_type;
+    //     // join_ref.type = old_type;
+    // }
 
-    void MutateTableRef(MutationTreeNode *parent_node, SQLStatement *stmt, MutationTestFunctionData *functionData, TableRef *from_table)
+    void MutateRegularJoinRef(MutationTreeNode *parent_node, SQLStatement *stmt, MutationTestFunctionData *functionData, JoinRef *from_table)
     {
         std::cout << "Calling the Mutate Table Ref function" << std::endl;
-        switch (from_table->type)
+        auto &join_ref = from_table->Cast<JoinRef>();
+        switch (join_ref.type)
         {
-        case TableReferenceType::JOIN:
+        case JoinType::LEFT:
+        case JoinType::RIGHT:
+        case JoinType::INNER:
+        case JoinType::OUTER:
+        case JoinType::SEMI:
+        case JoinType::ANTI:
         {
-            auto &join_ref = from_table->Cast<JoinRef>();
-            switch (join_ref.type)
+            std::vector<JoinType> mutation_types = {JoinType::LEFT, JoinType::RIGHT, JoinType::INNER, JoinType::OUTER, JoinType::SEMI, JoinType::ANTI};
+            for (auto type : mutation_types)
             {
-            case JoinType::LEFT:
-            case JoinType::RIGHT:
-            case JoinType::INNER:
-            case JoinType::OUTER:
-            {
-                std::vector<JoinType> mutation_types = {JoinType::LEFT, JoinType::RIGHT, JoinType::INNER, JoinType::OUTER};
-                for (auto type : mutation_types)
+                if (type != join_ref.type)
                 {
-                    if (type != join_ref.type)
-                    {
-                        MutateJoinType(type, stmt, parent_node, functionData);
-                        // stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = JoinType::INNER;
-                        // std::cout << "After mutation: " << static_cast<int>(stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type) << std::endl;
-                        // std::cout << "After mutation: " << static_cast<int>(join_ref.type) << std::endl;
-                    }
-                }
-                break;
-            }
-            default:
-                throw InternalException("Implemented expression type");
-                break;
-            }
+                    std::cout << JoinTypeToString(join_ref.type) << std::endl;
+                    // MutateJoinType(type, stmt, parent_node, functionData);
 
+                    auto old_type = join_ref.type;
+                    stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = type;
+                    functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
+                    parent_node->AddChild(*stmt);
+                    stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = old_type;
+                }
+            }
             break;
         }
         default:
+            throw InternalException("Implemented expression type");
             break;
         }
     }
@@ -293,6 +341,18 @@ namespace duckdb
                 // std::cout << "Where Operator 3: " << static_cast<int>(child_statement_node.where_clause->type) << std::endl;
                 if (child_statement_node.where_clause)
                     GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::WRO);
+                else if (child_statement_node.from_table)
+                {
+                    // TODO: trigger the mutation if where clause does not exist
+                    TableRef *from_table = child_statement_node.from_table.get();
+                    if (from_table->type == TableReferenceType::JOIN)
+                    {
+                        auto &cp = from_table->Cast<JoinRef>();
+                        // std::cout << "Join mutation called inside the for loop" << std::endl;
+                        GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::JOI);
+                    }
+                }
+
                 std::cout << "Completed Processing the statement: " << child_statement.ToString() << std::endl;
             }
             std::cout << "Completed The Statment Processing" << std::endl;
@@ -326,7 +386,7 @@ namespace duckdb
                     // std::cout << "For Loop of the join: " << m << std::endl;
                     const auto &a = child->statement->Copy();
                     auto &child_statement = a->Cast<SelectStatement>();
-                    std::cout << child_statement.ToString() << std::endl;
+                    // std::cout << child_statement.ToString() << std::endl;
                     auto &child_statement_node = child_statement.node->Cast<SelectNode>();
 
                     if (child_statement_node.from_table)
@@ -336,7 +396,7 @@ namespace duckdb
                         if (from_table->type == TableReferenceType::JOIN)
                         {
                             auto &cp = from_table->Cast<JoinRef>();
-                            std::cout << "Join mutation called inside the for loop" << std::endl;
+                            // std::cout << "Join mutation called inside the for loop" << std::endl;
                             GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::JOI);
                         }
                     }
@@ -354,9 +414,25 @@ namespace duckdb
                 const auto &a = statement.Copy();
                 const auto &dis_statement = a->Cast<SelectStatement>();
                 const auto &select_node = statement.node->Cast<SelectNode>();
-                // auto &cp = select_node.from_table.get()->Cast<JoinRef>();
-                MutateTableRef(parent_node, a.get(), functionData, select_node.from_table.get());
-                // std::cout << static_cast<int>(select_node.from_table->type) << std::endl;
+                if (select_node.from_table.get()->type == TableReferenceType::JOIN)
+                {
+
+                    auto &cp = select_node.from_table.get()->Cast<JoinRef>();
+                    switch (cp.ref_type)
+                    {
+                    case JoinRefType::REGULAR:
+                    {
+                        MutateRegularJoinRef(parent_node, a.get(), functionData, &cp);
+                        break;
+                    }
+                    case JoinRefType::NATURAL:
+                    {
+                    }
+                    default:
+                        break;
+                    }
+                    // std::cout << static_cast<int>(select_node.from_table->type) << std::endl;
+                }
             }
 
             // for (const auto &child : parent_node->children)
