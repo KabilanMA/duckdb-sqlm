@@ -60,9 +60,7 @@ namespace duckdb
         duckdb_libpgquery::PGList *parse_trees = ParserQuery(context, functionData->original_query);
         GenerateMutations(parse_trees, functionData);
 
-        std::cout << "Trying to create connection for querying original SQL statement" << std::endl;
         Connection con(context.db->GetDatabase(context));
-        std::cout << "Querying with original Query: " << functionData->original_query << std::endl;
         auto result_ = con.Query(functionData->original_query);
         functionData->original_result = std::move(result_);
 
@@ -88,7 +86,6 @@ namespace duckdb
         }
 
         Connection con(context.db->GetDatabase(context));
-        // std::cout << "Going to query the statement: " << data.mutated_queries[data.current_index]->ToString() << std::endl;
         auto ex_query = data.mutated_queries[data.current_index]->Copy();
         auto result = con.Query(std::move(ex_query));
         int count = 0;

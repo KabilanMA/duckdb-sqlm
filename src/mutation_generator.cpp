@@ -253,18 +253,6 @@ namespace duckdb
         }
     }
 
-    // void MutateJoinType(JoinType new_type, SQLStatement *stmt, MutationTreeNode *parent_node, MutationTestFunctionData *functionData)
-    // {
-    //     std::cout << "Calling the Mutate MutateJoinType function with type: " << std::endl;
-
-    //     auto old_type = stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type;
-    //     stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = new_type;
-    //     functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
-    //     parent_node->AddChild(*stmt);
-    //     stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = old_type;
-    //     // join_ref.type = old_type;
-    // }
-
     void MutateRegularJoinRef(MutationTreeNode *parent_node, SQLStatement *stmt, MutationTestFunctionData *functionData, JoinRef *from_table)
     {
         std::cout << "Calling the Mutate Table Ref function" << std::endl;
@@ -303,14 +291,11 @@ namespace duckdb
 
     MutationTreeNode *MudStatementGenerator::GenerateSelectMutations(SelectStatement &statement, MutationTestFunctionData *functionData, MutationTreeNode *parent_node, MutationOperatorTag operator_type)
     {
-        std::cout << "Generating Select Mutation Function Called with statement: " << statement.ToString() << std::endl;
         D_ASSERT(statement.TYPE == StatementType::SELECT_STATEMENT);
-        // std::cout << "Where Operator 1: " << static_cast<int>(statement.node->Cast<SelectNode>().where_clause->type) << std::endl;
 
         if (!parent_node)
         { // calling the select mutation generator for the first time.
           // therefore we have to create the root node, because root node will initially be nullptr
-            std::cout << "Calling the Generating Select Mutation Function for the first time" << std::endl;
             functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(statement.Copy().release()))));
 
             parent_node = new MutationTreeNode(statement.Copy());
@@ -318,8 +303,6 @@ namespace duckdb
 
             const auto &a = statement.Copy();
             auto &dis_statement = a->Cast<SelectStatement>();
-
-            // std::cout << "Where Operator 2: " << static_cast<int>(dis_statement.node->Cast<SelectNode>().where_clause->type) << std::endl;
 
             if (!DistinctModifierExist(dis_statement.node->modifiers, true))
             {
@@ -331,14 +314,9 @@ namespace duckdb
 
             for (const auto &child : parent_node->children)
             {
-                std::cout << "Running the for loop" << std::endl;
                 const auto &a = child->statement->Copy();
                 auto &child_statement = a->Cast<SelectStatement>();
-                std::cout << "Casted select statement: " << child_statement.ToString() << std::endl;
                 auto &child_statement_node = child_statement.node->Cast<SelectNode>();
-                std::cout << "Select Node casting successful" << std::endl;
-                std::cout << child->statement->Copy()->Cast<SelectStatement>().ToString() << std::endl;
-                // std::cout << "Where Operator 3: " << static_cast<int>(child_statement_node.where_clause->type) << std::endl;
                 if (child_statement_node.where_clause)
                     GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::WRO);
                 else if (child_statement_node.from_table)
@@ -352,22 +330,16 @@ namespace duckdb
                         GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::JOI);
                     }
                 }
-
-                std::cout << "Completed Processing the statement: " << child_statement.ToString() << std::endl;
             }
-            std::cout << "Completed The Statment Processing" << std::endl;
         }
         else
         {
-            std::cout << "Generating Select Mutation Function Recursively" << std::endl;
-
             if (operator_type == MutationOperatorTag::SEL)
             {
                 throw InternalException("Unsupported mutation tree format requested");
             }
             else if (operator_type == MutationOperatorTag::WRO)
             {
-                std::cout << "Generating mutants of (where clause) COMPARE operator" << std::endl;
 
                 const auto &a = statement.Copy();
                 auto &select_stmt = a->Cast<SelectStatement>();
@@ -375,34 +347,25 @@ namespace duckdb
                 // MutateWhereClauseStatement(parent_node, std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(statement.Copy().release()))), functionData);
                 vector<ExpressionType> except_mutations = {select_stmt_node.where_clause->type};
                 MutateParsedExpression(parent_node, a.get(), functionData, select_stmt_node.where_clause.get(), except_mutations);
-                std::cout << "Completed where clause mutation" << std::endl;
                 D_ASSERT(parent_node->children.size() != 0);
-                std::cout << "Child statements after where clause: " << parent_node->children.size() << std::endl;
-                std::cout << "Last child" << parent_node->children[parent_node->children.size() - 1]->statement->ToString() << std::endl;
 
                 // int m = 0;
                 for (const auto &child : parent_node->children)
                 {
-                    // std::cout << "For Loop of the join: " << m << std::endl;
                     const auto &a = child->statement->Copy();
                     auto &child_statement = a->Cast<SelectStatement>();
-                    // std::cout << child_statement.ToString() << std::endl;
                     auto &child_statement_node = child_statement.node->Cast<SelectNode>();
 
                     if (child_statement_node.from_table)
                     {
-                        std::cout << "From table" << std::endl;
                         TableRef *from_table = child_statement_node.from_table.get();
                         if (from_table->type == TableReferenceType::JOIN)
                         {
                             auto &cp = from_table->Cast<JoinRef>();
-                            // std::cout << "Join mutation called inside the for loop" << std::endl;
                             GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::JOI);
                         }
                     }
-                    // std::cout << "Completed For Loop of the join: " << m++ << std::endl;
                 }
-                std::cout << "Completed the for loop of the where clause completion mutation" << std::endl;
             }
             else if (operator_type == MutationOperatorTag::LCR)
             {
@@ -411,8 +374,8 @@ namespace duckdb
             }
             else if (operator_type == MutationOperatorTag::JOI)
             {
-                const auto &a = statement.Copy();
-                const auto &dis_statement = a->Cast<SelectStatement>();
+                // const auto &a = statement.Copy();
+                // const auto &dis_statement = a->Cast<SelectStatement>();
                 const auto &select_node = statement.node->Cast<SelectNode>();
                 if (select_node.from_table.get()->type == TableReferenceType::JOIN)
                 {
@@ -422,11 +385,25 @@ namespace duckdb
                     {
                     case JoinRefType::REGULAR:
                     {
-                        MutateRegularJoinRef(parent_node, a.get(), functionData, &cp);
+                        MutateRegularJoinRef(parent_node, &statement, functionData, &cp);
                         break;
                     }
                     case JoinRefType::NATURAL:
                     {
+                        std::cout << "Natural Join: " << static_cast<int>(select_node.from_table->type) << std::endl;
+                        cp.ref_type = JoinRefType::CROSS;
+                        functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(statement.Copy().release()))));
+                        parent_node->AddChild(statement);
+                        cp.ref_type = JoinRefType::NATURAL;
+                        break;
+                    }
+                    case JoinRefType::CROSS:
+                    {
+                        cp.ref_type = JoinRefType::NATURAL;
+                        functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(statement.Copy().release()))));
+                        parent_node->AddChild(statement);
+                        cp.ref_type = JoinRefType::CROSS;
+                        break;
                     }
                     default:
                         break;
@@ -458,15 +435,11 @@ namespace duckdb
             // }
         }
 
-        std::cout << "Completed generating Select MutatationN" << std::endl;
-
         return parent_node;
     }
 
     void GenerateMutations(duckdb_libpgquery::PGList *parse_tree_list, MutationTestFunctionData *functionData)
     {
-        std::cout << "Starting the GenerateMutations() function with parse tree size: " << parse_tree_list->length << std::endl;
-
         vector<unique_ptr<SQLStatement>> statements;
         ParserOptions parserOptions;
         Transformer transformer(parserOptions);
@@ -488,7 +461,5 @@ namespace duckdb
                 break;
             }
         }
-
-        std::cout << "exiting the generate mutation function" << std::endl;
     }
 }

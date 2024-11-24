@@ -108,3 +108,5 @@ LOAD sqlmud
 
 1. `SELECT`, `SELECT DISTINCT`
 2. `=`, `<=`, `>=`, `!=`
+
+`make debug DUCKDB_PLATFORM=x86_64`
