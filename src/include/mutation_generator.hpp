@@ -15,6 +15,13 @@
 #include "duckdb/parser/transformer.hpp"
 #include "duckdb/parser/query_node.hpp"
 #include <algorithm>
+#include <random>
+
+using std::cin;
+using std::cout;
+using std::endl;
+using std::string;
+using std::vector;
 
 namespace duckdb
 {
@@ -22,7 +29,10 @@ namespace duckdb
     {
         SEL,
         WRO,
-        JOI,
+        JOIN,
+        HVGO,
+        AGR,
+        ORD,
         LCR
     } MutationOperatorTag;
 

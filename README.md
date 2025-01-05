@@ -110,3 +110,8 @@ LOAD sqlmud
 2. `=`, `<=`, `>=`, `!=`
 
 `make debug DUCKDB_PLATFORM=x86_64`
+`./build/release/duckdb -init /home/kabilan/Desktop/Research/sql/duckdb-sqlm/src/test_data.sql`
+
+### Sample Test Queries
+
+1. SELECT MAX(salary) AS highest_salary FROM employees;

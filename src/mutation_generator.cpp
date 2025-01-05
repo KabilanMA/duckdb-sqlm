@@ -1,6 +1,5 @@
 
 #include "mutation_generator.hpp"
-#include <random>
 
 namespace duckdb
 {
@@ -48,9 +47,10 @@ namespace duckdb
      */
     bool MudStatementGenerator::DistinctModifierExist(vector<unique_ptr<ResultModifier>> &modifiers, bool remove_modifier)
     {
-        for (idx_t modifier_idx = modifiers.size(); modifier_idx > 0; modifier_idx--)
+        for (idx_t modifier_idx = 0; modifier_idx < modifiers.size(); modifier_idx++)
         {
-            auto &modifier = *modifiers[modifier_idx - 1];
+            auto &modifier = *modifiers[modifier_idx];
+            // std::cout << "Modifier Index: " << modifier_idx << " : " << static_cast<int>(modifier.type) << std::endl;
             if (modifier.type == ResultModifierType::DISTINCT_MODIFIER)
             {
                 auto &distinct_modifier = modifier.Cast<DistinctModifier>();
@@ -58,16 +58,9 @@ namespace duckdb
                 {
                     // we have a DISTINCT without an ON clause - this distinct does not need to be added
                     if (remove_modifier)
-                        modifiers.erase(modifiers.begin() + (modifier_idx - 1));
+                        modifiers.erase(modifiers.begin() + modifier_idx);
                     return true;
                 }
-            }
-            else if (modifier.type == ResultModifierType::LIMIT_MODIFIER ||
-                     modifier.type == ResultModifierType::LIMIT_PERCENT_MODIFIER)
-            {
-                // we encountered a LIMIT or LIMIT PERCENT - these change the result of DISTINCT, so we do need to push a
-                // DISTINCT relation
-                return false;
             }
         }
         return false;
@@ -149,11 +142,42 @@ namespace duckdb
             // std::random_device rd;
             // std::mt19937 g(rd());
             // std::shuffle(condition_actions.begin(), condition_actions.end(), g);
-
             for (auto &action : condition_actions)
             {
                 action();
             }
+            break;
+        }
+        case ExpressionType::COMPARE_BETWEEN:
+        {
+            expression->type = ExpressionType::COMPARE_NOT_BETWEEN;
+            functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
+            parent_node->AddChild(*stmt);
+            expression->type = ExpressionType::COMPARE_BETWEEN;
+            break;
+        }
+        case ExpressionType::COMPARE_NOT_BETWEEN:
+        {
+            expression->type = ExpressionType::COMPARE_BETWEEN;
+            functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
+            parent_node->AddChild(*stmt);
+            expression->type = ExpressionType::COMPARE_NOT_BETWEEN;
+            break;
+        }
+        case ExpressionType::COMPARE_IN:
+        {
+            expression->type = ExpressionType::COMPARE_NOT_IN;
+            functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
+            parent_node->AddChild(*stmt);
+            expression->type = ExpressionType::COMPARE_IN;
+            break;
+        }
+        case ExpressionType::COMPARE_NOT_IN:
+        {
+            expression->type = ExpressionType::COMPARE_IN;
+            functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
+            parent_node->AddChild(*stmt);
+            expression->type = ExpressionType::COMPARE_NOT_IN;
             break;
         }
         case ExpressionType::CONJUNCTION_AND:
@@ -165,7 +189,6 @@ namespace duckdb
             {
                 auto &left_child = conjunction_expr->children.get(0);
                 auto &right_child = conjunction_expr->children.get(1);
-
                 std::function<void(MutationTreeNode *, SQLStatement *, MutationTestFunctionData *, ConjunctionExpression *, ParsedExpression *, ParsedExpression *)> mutateChild = [](MutationTreeNode *_parent_node, SQLStatement *_stmt, MutationTestFunctionData *_functionData, ConjunctionExpression *conjunction_expr, ParsedExpression *left_child, ParsedExpression *right_child)
                 {
                     std::function<void(MutationTreeNode *, SQLStatement *, MutationTestFunctionData *, ConjunctionExpression *, ParsedExpression *)> permutationMutateExpression = [](MutationTreeNode *_parent_node, SQLStatement *_stmt, MutationTestFunctionData *_functionData, ConjunctionExpression *conjunction_expr, ParsedExpression *right_expression)
@@ -191,44 +214,37 @@ namespace duckdb
                             conjunction_expr->type = ExpressionType::CONJUNCTION_AND;
                         }
                     };
-
                     if (left_child->type != ExpressionType::COMPARE_LESSTHAN)
                     {
                         left_child->type = ExpressionType::COMPARE_LESSTHAN;
                         permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
                     }
-
                     if (left_child->type != ExpressionType::COMPARE_LESSTHANOREQUALTO)
                     {
                         left_child->type = ExpressionType::COMPARE_LESSTHANOREQUALTO;
                         permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
                     }
-
                     if (left_child->type != ExpressionType::COMPARE_GREATERTHAN)
                     {
                         left_child->type = ExpressionType::COMPARE_GREATERTHAN;
                         permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
                     }
-
                     if (left_child->type != ExpressionType::COMPARE_GREATERTHANOREQUALTO)
                     {
                         left_child->type = ExpressionType::COMPARE_GREATERTHANOREQUALTO;
                         permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
                     }
-
                     if (left_child->type != ExpressionType::COMPARE_EQUAL)
                     {
                         left_child->type = ExpressionType::COMPARE_EQUAL;
                         permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
                     }
-
                     if (left_child->type != ExpressionType::COMPARE_NOTEQUAL)
                     {
                         left_child->type = ExpressionType::COMPARE_NOTEQUAL;
                         permutationMutateExpression(_parent_node, _stmt, _functionData, conjunction_expr, right_child);
                     }
                 };
-
                 if (left_child->type == ExpressionType::COMPARE_EQUAL || left_child->type == ExpressionType::COMPARE_NOTEQUAL || left_child->type == ExpressionType::COMPARE_LESSTHAN || left_child->type == ExpressionType::COMPARE_LESSTHANOREQUALTO || left_child->type == ExpressionType::COMPARE_GREATERTHAN || left_child->type == ExpressionType::COMPARE_GREATERTHANOREQUALTO)
                 {
                     mutateChild(parent_node, stmt, functionData, conjunction_expr, left_child.get(), right_child.get());
@@ -244,10 +260,25 @@ namespace duckdb
             }
             break;
         }
+        case ExpressionType::COMPARE_DISTINCT_FROM:
+        {
+            expression->type = ExpressionType::COMPARE_NOT_DISTINCT_FROM;
+            functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
+            parent_node->AddChild(*stmt);
+            expression->type = ExpressionType::COMPARE_DISTINCT_FROM;
+            break;
+        }
+        case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
+        {
+            expression->type = ExpressionType::COMPARE_DISTINCT_FROM;
+            functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
+            parent_node->AddChild(*stmt);
+            expression->type = ExpressionType::COMPARE_NOT_DISTINCT_FROM;
+            break;
+        }
         default:
         {
-            std::cout << ExpressionTypeToString(expression->type) << std::endl;
-            throw InternalException("Implemented expression type");
+            throw InternalException("Unimplemented expression type");
             break;
         }
         }
@@ -255,7 +286,7 @@ namespace duckdb
 
     void MutateRegularJoinRef(MutationTreeNode *parent_node, SQLStatement *stmt, MutationTestFunctionData *functionData, JoinRef *from_table)
     {
-        std::cout << "Calling the Mutate Table Ref function" << std::endl;
+        // std::cout << "Calling the Mutate Table Ref function" << std::endl;
         auto &join_ref = from_table->Cast<JoinRef>();
         switch (join_ref.type)
         {
@@ -271,9 +302,8 @@ namespace duckdb
             {
                 if (type != join_ref.type)
                 {
-                    std::cout << JoinTypeToString(join_ref.type) << std::endl;
+                    // std::cout << JoinTypeToString(join_ref.type) << std::endl;
                     // MutateJoinType(type, stmt, parent_node, functionData);
-
                     auto old_type = join_ref.type;
                     stmt->Cast<SelectStatement>().node->Cast<SelectNode>().from_table->Cast<JoinRef>().type = type;
                     functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(stmt->Copy().release()))));
@@ -289,98 +319,222 @@ namespace duckdb
         }
     }
 
+    void MutateAggregateFunction(MutationTreeNode *parent_node, SQLStatement *stmt, MutationTestFunctionData *functionData, ParsedExpression *expression)
+    {
+        parent_node->AddChild(*stmt);
+        auto &select_stmt = stmt->Cast<SelectStatement>();
+        auto &select_stmt_node = select_stmt.node->Cast<SelectNode>();
+
+        if (expression->type == ExpressionType::FUNCTION)
+        {
+            auto &function_expr = expression->Cast<FunctionExpression>();
+            enum class AggregateType
+            {
+                COUNT = 0,
+                SUM,
+                AVG,
+                MIN,
+                MAX
+            };
+
+            std::function<void(MutationTreeNode *, SQLStatement *, MutationTestFunctionData *, FunctionExpression *, AggregateType)> mutateAggregate = [](MutationTreeNode *_parent_node, SQLStatement *_stmt, MutationTestFunctionData *_functionData, FunctionExpression *fun_expr, AggregateType type)
+            {
+                vector<AggregateType> mutation_types = {AggregateType::COUNT, AggregateType::SUM, AggregateType::AVG, AggregateType::MIN, AggregateType::MAX};
+                for (auto mutation_type : mutation_types)
+                {
+                    if (mutation_type == type)
+                    {
+                        if (fun_expr->distinct)
+                        {
+                            fun_expr->distinct = false;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = true;
+                        }
+                        else
+                        {
+                            fun_expr->distinct = true;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = false;
+                        }
+                    }
+                    switch (mutation_type)
+                    {
+                    case AggregateType::COUNT:
+                    {
+                        fun_expr->function_name = "count";
+                        _parent_node->AddChild(*_stmt);
+                        _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                        if (fun_expr->distinct)
+                        {
+                            fun_expr->distinct = false;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = true;
+                        }
+                        else
+                        {
+                            fun_expr->distinct = true;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = false;
+                        }
+                        break;
+                    }
+                    case AggregateType::SUM:
+                    {
+                        fun_expr->function_name = "sum";
+                        _parent_node->AddChild(*_stmt);
+                        _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                        if (fun_expr->distinct)
+                        {
+                            fun_expr->distinct = false;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = true;
+                        }
+                        else
+                        {
+                            fun_expr->distinct = true;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = false;
+                        }
+                        break;
+                    }
+                    case AggregateType::AVG:
+                    {
+                        fun_expr->function_name = "avg";
+                        _parent_node->AddChild(*_stmt);
+                        _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                        if (fun_expr->distinct)
+                        {
+                            fun_expr->distinct = false;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = true;
+                        }
+                        else
+                        {
+                            fun_expr->distinct = true;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = false;
+                        }
+                        break;
+                    }
+                    case AggregateType::MAX:
+                    {
+                        fun_expr->function_name = "max";
+                        if (fun_expr->distinct)
+                        {
+                            fun_expr->distinct = false;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = true;
+                        }
+                        else
+                        {
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                        }
+                        break;
+                    }
+                    case AggregateType::MIN:
+                    {
+                        fun_expr->function_name = "min";
+                        if (fun_expr->distinct)
+                        {
+                            fun_expr->distinct = false;
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                            fun_expr->distinct = true;
+                        }
+                        else
+                        {
+                            _parent_node->AddChild(*_stmt);
+                            _functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(_stmt->Copy().release()))));
+                        }
+                        break;
+                    }
+                    default:
+                    {
+                        throw InternalException("Unimplemented aggregate type");
+                        break;
+                    }
+                    }
+                }
+            };
+
+            if (function_expr.function_name == "count")
+            {
+                mutateAggregate(parent_node, stmt, functionData, &function_expr, AggregateType::COUNT);
+            }
+            else if (function_expr.function_name == "sum")
+            {
+                mutateAggregate(parent_node, stmt, functionData, &function_expr, AggregateType::SUM);
+            }
+            else if (function_expr.function_name == "avg")
+            {
+                mutateAggregate(parent_node, stmt, functionData, &function_expr, AggregateType::AVG);
+            }
+            else if (function_expr.function_name == "min")
+            {
+                mutateAggregate(parent_node, stmt, functionData, &function_expr, AggregateType::MIN);
+            }
+            else if (function_expr.function_name == "max")
+            {
+                mutateAggregate(parent_node, stmt, functionData, &function_expr, AggregateType::MAX);
+            }
+        }
+    }
+
     MutationTreeNode *MudStatementGenerator::GenerateSelectMutations(SelectStatement &statement, MutationTestFunctionData *functionData, MutationTreeNode *parent_node, MutationOperatorTag operator_type)
     {
         D_ASSERT(statement.TYPE == StatementType::SELECT_STATEMENT);
-
         if (!parent_node)
         { // calling the select mutation generator for the first time.
-          // therefore we have to create the root node, because root node will initially be nullptr
+            // therefore we have to create the root node, because root node will initially be nullptr
+            cout << "Creating the root node" << endl;
             functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(statement.Copy().release()))));
-
             parent_node = new MutationTreeNode(statement.Copy());
             parent_node->AddChild(statement);
-
             const auto &a = statement.Copy();
             auto &dis_statement = a->Cast<SelectStatement>();
-
             if (!DistinctModifierExist(dis_statement.node->modifiers, true))
             {
                 dis_statement.node->modifiers.push_back(make_uniq<DistinctModifier>());
             }
-
             parent_node->AddChild(dis_statement);
             functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(dis_statement.Copy().release()))));
-
             for (const auto &child : parent_node->children)
             {
                 const auto &a = child->statement->Copy();
                 auto &child_statement = a->Cast<SelectStatement>();
                 auto &child_statement_node = child_statement.node->Cast<SelectNode>();
-                if (child_statement_node.where_clause)
-                    GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::WRO);
-                else if (child_statement_node.from_table)
-                {
-                    // TODO: trigger the mutation if where clause does not exist
-                    TableRef *from_table = child_statement_node.from_table.get();
-                    if (from_table->type == TableReferenceType::JOIN)
-                    {
-                        auto &cp = from_table->Cast<JoinRef>();
-                        // std::cout << "Join mutation called inside the for loop" << std::endl;
-                        GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::JOI);
-                    }
-                }
+                GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::JOIN);
             }
         }
         else
         {
-            if (operator_type == MutationOperatorTag::SEL)
+            const auto &a = statement.Copy();
+            auto &select_stmt = a->Cast<SelectStatement>();
+            auto &select_stmt_node = select_stmt.node->Cast<SelectNode>();
+
+            switch (operator_type)
+            {
+            case MutationOperatorTag::SEL:
             {
                 throw InternalException("Unsupported mutation tree format requested");
+                break;
             }
-            else if (operator_type == MutationOperatorTag::WRO)
+            case MutationOperatorTag::JOIN:
             {
-
-                const auto &a = statement.Copy();
-                auto &select_stmt = a->Cast<SelectStatement>();
-                auto &select_stmt_node = select_stmt.node->Cast<SelectNode>();
-                // MutateWhereClauseStatement(parent_node, std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(statement.Copy().release()))), functionData);
-                vector<ExpressionType> except_mutations = {select_stmt_node.where_clause->type};
-                MutateParsedExpression(parent_node, a.get(), functionData, select_stmt_node.where_clause.get(), except_mutations);
-                D_ASSERT(parent_node->children.size() != 0);
-
-                // int m = 0;
-                for (const auto &child : parent_node->children)
+                if (select_stmt_node.from_table.get()->type == TableReferenceType::JOIN)
                 {
-                    const auto &a = child->statement->Copy();
-                    auto &child_statement = a->Cast<SelectStatement>();
-                    auto &child_statement_node = child_statement.node->Cast<SelectNode>();
-
-                    if (child_statement_node.from_table)
-                    {
-                        TableRef *from_table = child_statement_node.from_table.get();
-                        if (from_table->type == TableReferenceType::JOIN)
-                        {
-                            auto &cp = from_table->Cast<JoinRef>();
-                            GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::JOI);
-                        }
-                    }
-                }
-            }
-            else if (operator_type == MutationOperatorTag::LCR)
-            {
-                std::cout << "Unimplemented Relational Operator Type" << std::endl;
-                // throw InternalException("Unimplemented Relational Operator Type");
-            }
-            else if (operator_type == MutationOperatorTag::JOI)
-            {
-                // const auto &a = statement.Copy();
-                // const auto &dis_statement = a->Cast<SelectStatement>();
-                const auto &select_node = statement.node->Cast<SelectNode>();
-                if (select_node.from_table.get()->type == TableReferenceType::JOIN)
-                {
-
-                    auto &cp = select_node.from_table.get()->Cast<JoinRef>();
+                    parent_node->AddChild(statement);
+                    auto &cp = select_stmt_node.from_table.get()->Cast<JoinRef>();
                     switch (cp.ref_type)
                     {
                     case JoinRefType::REGULAR:
@@ -390,7 +544,6 @@ namespace duckdb
                     }
                     case JoinRefType::NATURAL:
                     {
-                        std::cout << "Natural Join: " << static_cast<int>(select_node.from_table->type) << std::endl;
                         cp.ref_type = JoinRefType::CROSS;
                         functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(statement.Copy().release()))));
                         parent_node->AddChild(statement);
@@ -410,29 +563,97 @@ namespace duckdb
                     }
                     // std::cout << static_cast<int>(select_node.from_table->type) << std::endl;
                 }
+                if (parent_node->children.size() <= 1)
+                {
+                    // no join statement in the query, therefore no join clause mutation is done.
+                    GenerateSelectMutations(statement, functionData, parent_node, MutationOperatorTag::WRO);
+                }
+                else
+                {
+                    for (const auto &child : parent_node->children)
+                    {
+                        const auto &a = child->statement->Copy();
+                        auto &child_statement = a->Cast<SelectStatement>();
+                        GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::WRO);
+                    }
+                }
+                break;
             }
+            case MutationOperatorTag::WRO:
+            {
+                // MutateWhereClauseStatement(parent_node, std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>(statement.Copy().release()))), functionData);
+                if (select_stmt_node.where_clause)
+                {
+                    vector<ExpressionType> except_mutations = {select_stmt_node.where_clause->type};
+                    MutateParsedExpression(parent_node, a.get(), functionData, select_stmt_node.where_clause.get(), except_mutations);
+                    D_ASSERT(parent_node->children.size() != 0);
+                    for (const auto &child : parent_node->children)
+                    {
+                        const auto &a = child->statement->Copy();
+                        auto &child_statement = a->Cast<SelectStatement>();
+                        // auto &child_statement_node = child_statement.node->Cast<SelectNode>();
+                        GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::HVGO);
+                    }
+                }
+                else
+                {
+                    GenerateSelectMutations(statement, functionData, parent_node, MutationOperatorTag::HVGO);
+                }
+                break;
+            }
+            case MutationOperatorTag::HVGO:
+            {
+                if (select_stmt_node.having != nullptr)
+                {
+                    vector<ExpressionType> except_mutations = {select_stmt_node.having->type};
+                    MutateParsedExpression(parent_node, a.get(), functionData, select_stmt_node.having.get(), except_mutations);
+                    for (const auto &child : parent_node->children)
+                    {
+                        const auto &a = child->statement->Copy();
+                        auto &child_statement = a->Cast<SelectStatement>();
+                        GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::AGR);
+                    }
+                }
+                else
+                {
+                    GenerateSelectMutations(statement, functionData, parent_node, MutationOperatorTag::AGR);
+                }
 
-            // for (const auto &child : parent_node->children)
-            // {
-            //     const auto &a = child->statement.Copy();
-            //     auto &child_statement = a->Cast<SelectStatement>();
-            //     auto &child_statement_node = child_statement.node->Cast<SelectNode>();
+                break;
+            }
+            case MutationOperatorTag::AGR:
+            {
+                bool is_aggregate = false;
+                for (auto &projection : select_stmt_node.GetSelectList())
+                {
+                    if (projection->type == ExpressionType::FUNCTION)
+                    {
+                        is_aggregate = true;
+                        // TODO: Implement the columnref condition to differentiate varchar column and integer column.
+                        MutateAggregateFunction(parent_node, a.get(), functionData, projection.get());
+                    }
+                }
+                if (is_aggregate)
+                {
+                    for (const auto &child : parent_node->children)
+                    {
+                        const auto &a = child->statement->Copy();
+                        auto &child_statement = a->Cast<SelectStatement>();
+                        GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::ORD);
+                    }
+                }
+                else
+                    GenerateSelectMutations(statement, functionData, parent_node, MutationOperatorTag::ORD);
+                break;
+            }
+            case MutationOperatorTag::ORD:
+            {
 
-            //     if (child_statement_node.where_clause)
-            //     {
-            //         GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::WRO);
-            //     }
-            // else if (child_statement_node.from_table)
-            // {
-            //     TableRef *from_table = child_statement_node.from_table.get();
-            //     if (from_table->type == TableReferenceType::JOIN)
-            //     {
-            //         auto &cp = from_table->Cast<JoinRef>();
-            //         GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::JOI);
-            //     }
-            // }
-            //     std::cout << "Completed Processing the statement: " << child_statement.ToString() << std::endl;
-            // }
+                break;
+            }
+            default:
+                break;
+            }
         }
 
         return parent_node;
