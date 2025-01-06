@@ -648,7 +648,39 @@ namespace duckdb
             }
             case MutationOperatorTag::ORD:
             {
+                for (auto &modifier : select_stmt_node.modifiers)
+                {
+                    if (modifier->type == ResultModifierType::ORDER_MODIFIER)
+                    {
+                        auto &order_by_modifier = modifier->Cast<OrderModifier>().orders[0];
+                        parent_node->AddChild(*a);
+                        OrderType old_type = order_by_modifier.type;
+                        if (order_by_modifier.type == OrderType::ASCENDING || order_by_modifier.type == OrderType::ORDER_DEFAULT)
+                        {
 
+                            order_by_modifier.type = OrderType::DESCENDING;
+                            parent_node->AddChild(*a);
+                            functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>((*a).Copy().release()))));
+                        }
+                        else
+                        {
+                            order_by_modifier.type = OrderType::ORDER_DEFAULT;
+                            parent_node->AddChild(*a);
+                            functionData->mutated_queries.push_back(std::move(std::unique_ptr<SelectStatement>(dynamic_cast<SelectStatement *>((*a).Copy().release()))));
+                        }
+                    }
+                }
+                if (parent_node->children.size() <= 1)
+                    GenerateSelectMutations(statement, functionData, parent_node, MutationOperatorTag::LCR);
+                else
+                {
+                    for (const auto &child : parent_node->children)
+                    {
+                        const auto &a = child->statement->Copy();
+                        auto &child_statement = a->Cast<SelectStatement>();
+                        GenerateSelectMutations(child_statement, functionData, child.get(), MutationOperatorTag::LCR);
+                    }
+                }
                 break;
             }
             default:
