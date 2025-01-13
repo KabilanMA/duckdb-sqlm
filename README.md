@@ -115,3 +115,4 @@ LOAD sqlmud
 ### Sample Test Queries
 
 1. SELECT MAX(salary) AS highest_salary FROM employees;
+2. SELECT department, location, AVG(salary) FROM employees GROUP BY department, location;

@@ -16,12 +16,13 @@
 #include "duckdb/parser/query_node.hpp"
 #include <algorithm>
 #include <random>
+#include <memory>
+#include <iostream>
 
 using std::cin;
 using std::cout;
 using std::endl;
 using std::string;
-using std::vector;
 
 namespace duckdb
 {
@@ -33,6 +34,7 @@ namespace duckdb
         HVGO,
         AGR,
         ORD,
+        GRU,
         LCR
     } MutationOperatorTag;
 
